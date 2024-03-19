@@ -116,7 +116,7 @@ pkgs: prevPkgs: {
             mkdir -p $out/${stdenv.targetPlatform.config}/bin
             ln -s ${retro68.binutils_unwrapped}/${stdenv.targetPlatform.config}/bin/* $out/${stdenv.targetPlatform.config}/bin/
 
-            export target_configargs="--disable-nls --enable-libstdcxx-dual-abi=no --disable-libstdcxx-verbose"
+            export target_configargs="--disable-nls --enable-libstdcxx-dual-abi=no --disable-libstdcxx-verbose --enable-newlib-io-long-long --enable-newlib-io-long-double --enable-newlib-io-c99-formats --enable-newlib-io-pos-args"
             $src/configure ${builtins.toString configureFlags} --prefix=$out
             make -j$NIX_BUILD_CORES
             make install
