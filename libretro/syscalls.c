@@ -59,6 +59,29 @@ ssize_t _consoleread(int fd, void *buf, size_t count);
 
 const int kMacRefNumOffset = 10;
 
+static int OSErrToErrno(OSErr err) {
+    switch (err) {
+    case noErr:
+        return 0;
+
+    case nsvErr:
+        return ENODEV;
+
+    case fnfErr:
+    case dirNFErr:
+        return ENOENT;
+
+    case bdNamErr:
+    case paramErr:
+        return EINVAL;
+
+    case ioErr:
+    default:
+        return EIO;
+    }
+}
+
+
 ssize_t _write_r(struct _reent *reent, int fd, const void *buf, size_t count)
 {
     long cnt = count;
@@ -142,7 +165,82 @@ int _close_r(struct _reent *reent, int fd)
 
 int _fstat_r(struct _reent *reent, int fd, struct stat *buf)
 {
-    return -1;
+    const long long int epochDiffInSeconds = 2082844800LL;
+
+    if (buf == NULL) {
+        reent->_errno = EFAULT;
+        return -1;
+    }
+
+    memset(buf, 0, sizeof (struct stat));
+    buf->st_nlink = 1;
+    buf->st_uid = 42;
+    buf->st_gid = 42;
+    buf->st_blksize = 512;
+
+    if (fd < kMacRefNumOffset) {
+        // Console.
+        unsigned long secs;
+        GetDateTime(&secs);
+
+        buf->st_mode = S_IFCHR | S_IRUSR | S_IWUSR | S_IWGRP;
+        buf->st_mtim.tv_sec = secs - epochDiffInSeconds;
+        buf->st_ctim.tv_sec = secs - epochDiffInSeconds;
+        buf->st_atim.tv_sec = secs - epochDiffInSeconds;
+        return 0;
+    }
+
+    CInfoPBRec p;
+    memset(&p, 0, sizeof (p));
+    p.hFileInfo.ioFRefNum = fd - kMacRefNumOffset;
+    OSErr err = PBGetCatInfoSync(&p);
+    if (err) {
+        reent->_errno = OSErrToErrno(err);
+        return -1;
+    }
+
+  
+    ino_t inode;
+    mode_t mode;
+
+    long long mtim;
+    long long ctim;
+
+    int size = 0;
+    int phySize = 0;
+
+    if (p.hFileInfo.ioFlAttrib & 16) {
+        inode = p.dirInfo.ioDrDirID;
+        mode = S_IFDIR | S_IRUSR | S_IRUSR | S_IXUSR;
+        mtim = p.dirInfo.ioDrMdDat - epochDiffInSeconds;
+        ctim = p.dirInfo.ioDrCrDat - epochDiffInSeconds;
+    } else {
+        inode = p.hFileInfo.ioDirID;
+        mode = S_IFREG | S_IRUSR | S_IRUSR;
+        mtim = p.hFileInfo.ioFlMdDat - epochDiffInSeconds;
+        ctim = p.hFileInfo.ioFlCrDat - epochDiffInSeconds;
+        size = p.hFileInfo.ioFlLgLen;
+        phySize = p.hFileInfo.ioFlPyLen + p.hFileInfo.ioFlRPyLen;
+    }
+
+    HParamBlockRec h;
+    memset(&h, 0, sizeof (h));
+    h.volumeParam.ioVRefNum = p.hFileInfo.ioVRefNum;
+    err = PBHGetVInfoSync(&h);
+    if (err) {
+        reent->_errno = OSErrToErrno(err);
+        return -1;
+    }
+
+    buf->st_dev = h.volumeParam.ioVDrvInfo;
+    buf->st_ino = inode;
+    buf->st_mode = mode;
+    buf->st_size = size;
+    buf->st_mtim.tv_sec = mtim;
+    buf->st_ctim.tv_sec = ctim;
+    buf->st_blocks = (phySize / 512) + (phySize % 512 > 0);
+
+    return 0;
 }
 
 extern int _stat_r(struct _reent * reent, const char *fn, struct stat *buf)
