@@ -1,3 +1,4 @@
 [submodule "multiversal"]
 	path = multiversal
-	url = https://github.com/autc04/multiversal.git
+	url = https://github.com/agoode/multiversal.git
+	branch = fonts
