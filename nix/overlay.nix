@@ -9,7 +9,7 @@ pkgs: prevPkgs: {
           name = "retro68.monolithic";
           src = ../.;
           nativeBuildInputs = [ cmake bison flex ruby ninja bash ];
-          buildInputs = [ boost gmp mpfr libmpc zlib ]
+          buildInputs = [ boost gmp mpfr libmpc zlib texinfo ]
           ++ lib.optional hostPlatform.isDarwin
             darwin.apple_sdk.frameworks.ApplicationServices;
           buildCommand = ''
